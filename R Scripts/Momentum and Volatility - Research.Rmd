@@ -59,9 +59,11 @@ Here I penalise scientific notation.
 source("ggplot.PerformanceSummary.R")
 ```
 
-I created a ggplot version of PerformanceSummary from PerformanceAnalytics. The function charts the cumulative returns, drawdown and Refer to the attached R script to see the code for the plot. 
+I created a ggplot version of chart.PerformanceSummary from PerformanceAnalytics. The function charts the cumulative returns, drawdown and the per period returns. This is the same thing that the cahrt.PerformanceSummary function does. I prefer to use ggplot because not only does it look better, it is also more powerful with regards to custom plotting. For example, I've modified the code to change the colour of the plot if there is only one portfolio. The function from PerformanceAnalytics defaults to black, which isn't very nice to look at. Although the colour can be changed, the plot still does not look very enticing. Additionally, the chart.PerformanceSummary function only plots the period returns of the first column, even if there are multiple columns. Refer to the attached R script to see the code for the plot. 
 
 ###**2. Importing Data**###
+
+In this section, I import the data I need for the tests. The price, market capitalisation and volume data is sourced from the Findata database. The data on the 91 day treasury rate is downloaded from the South African Reserve Bank website. The data on the 10 year historical yield is sourced from investing.com and the data on the SAVI is downloaded from IRESS.
 
 ```{r File Location Strings}
 file_path <- paste0(getwd(), "/")
@@ -69,6 +71,8 @@ price_file <- paste0(file_path, "Prices.csv")
 volume_file <- paste0(file_path, "Volume.csv")
 mcap_file <- paste0(file_path, "Mcap.csv")
 ```
+
+In the code chunk above I create objects of the class character. These objects contain strings that have the location of the files I import into R. I do this for ease of replication of my code.
 
 ```{r Data Import, warning=FALSE}
 na_strings <- c("", "NA", "#N/A", "#N/A N/A", "nl", "#N/A Invalid Security")
@@ -80,6 +84,7 @@ mcaps <- read_csv(mcap_file, col_types = col_arg, na = na_strings, guess_max = I
 volume <- read_csv(volume_file, col_types = col_arg, na = na_strings, guess_max = Inf)
 ```
 
+In the code above, I import the data into R. Firstly, I specify a special set of strings that describe characters that should be treated as NA. I use the read_csv function from the readr package rather than the base read.csv function.
 
 ###**3. Cleaning Data**###
 
