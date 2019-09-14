@@ -1,0 +1,309 @@
+---
+title: "Predictive Power of Volatility for Momentum Profits on the JSE"
+author: "Mwangele Kaluba"
+date: "10 September 2019"
+output: html_document
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+In this document, I show the code I used to perform the tests for my research. Refer to my Research Objective for a description of the methodology that I follow here.
+
+###**1. Setting up my workspace**###
+
+In this section, I load prerequisite settings for my R session.
+
+####**1.1 Clearing previously saved workspace**####
+
+```{r Clear Workspace}
+rm(list = ls())
+```
+
+The code above clears the workspace. This is done as using the previously saved workspace defeats the purpose of using a script.
+
+####**1.2 Installing and loading packages**####
+
+```{r Loading Library, results='hide',  message = FALSE, warning=FALSE}
+# install.packages('tidyquant')
+# install.packages('tbl2xts')
+library(tidyquant)
+library(tbl2xts)
+```
+
+The tidyquant package contains all of the packages I use for all the code run here, with the exception of the tbl2xts package. The tbl2xts package is a useful package that integrates xts objects with the tidyverse. The primary use of tbl2xts will be to convert tibbles to xts objects. This is necessary because dplr verbs return tibbles. 
+
+The tidyquant package contains a combination of the tidyverse packages as well as frequently used financial and quantitative packages. One of the packages installed from the quantitative finance world is quantmod, which installs xts, zoo, TTR and PerformanceAnalytics.
+
+####**1.3 Setting up global options**####
+
+```{r Global Options, warning=FALSE}
+options("scipen"=99)
+```
+
+Here I penalise scientific notation.
+
+####**1.4 Calling custom functions**####
+
+```{r ggplot of PerformanceSummary, warning=FALSE}
+source("ggplot_PerformanceSummary.R")
+```
+
+I created a ggplot version of chart.PerformanceSummary from PerformanceAnalytics. The function charts the cumulative returns, drawdown and the per period returns. This is the same thing that the cahrt.PerformanceSummary function does. I prefer to use ggplot because not only does it look better, it is also more powerful with regards to custom plotting. For example, I've modified the code to change the colour of the plot if there is only one portfolio. The function from PerformanceAnalytics defaults to black, which isn't very nice to look at. Although the colour can be changed, the plot still does not look very enticing. Additionally, the chart.PerformanceSummary function only plots the period returns of the first column, even if there are multiple columns. Refer to the attached R script to see the code for the plot. 
+
+###**2. Importing Data**###
+
+In this section, I import the data I need for the tests. The price, market capitalisation and volume data is sourced from the Findata database. The data on the 91 day treasury rate is downloaded from the South African Reserve Bank website. The data on the 10 year historical yield is sourced from investing.com and the data on the SAVI is downloaded from IRESS.
+
+```{r File Location Strings}
+file_path <- paste0(getwd(), "/")
+price_file <- paste0(file_path, "Prices.csv")
+volume_file <- paste0(file_path, "Volume.csv")
+mcap_file <- paste0(file_path, "Mcap.csv")
+```
+
+In the code chunk above I create objects of the class character. These objects contain strings that have the location of the files I import into R. I do this for ease of replication of my code.
+
+```{r Data Import, warning=FALSE}
+na_strings <- c("", "NA", "#N/A", "#N/A N/A", "nl", "#N/A Invalid Security")
+
+col_arg <- cols(.default = "d", Dates = "c")
+
+prices <- read_csv(price_file, col_types = col_arg, na = na_strings, guess_max = Inf)
+mcaps <- read_csv(mcap_file, col_types = col_arg, na = na_strings, guess_max = Inf)
+volume <- read_csv(volume_file, col_types = col_arg, na = na_strings, guess_max = Inf)
+```
+
+In the code above, I import the data into R. Firstly, I specify a special set of strings that describe characters that should be treated as NA. I use the read_csv function from the readr package rather than the base read.csv function.
+
+###**3. Cleaning Data**###
+
+
+
+####**3.1 Removing Duplicated Columns**####
+
+```{r Deleting Duplicated columns, comment=NULL}
+prices <- prices %>%
+  select(-contains("_"))
+
+mcaps <- mcaps %>%
+  select(-contains("_"))
+
+volume <- volume %>%
+  select(-contains("_"))
+```
+
+The read_csv() function from readr differs from the base read.csv() in the way they treat duplicated columns.
+
+####**3.2 Deleting Columns with no Data**####
+
+```{r Deleting cols with all nas, }
+prices <- prices %>% select_if(~!all(is.na(.)))
+```
+
+
+```{r}
+mcaps <- mcaps %>%
+  select(colnames(prices))
+
+volume <- volume %>%
+  select(colnames(prices))
+```
+
+
+###**4. Data Transformations**###
+
+
+
+####**4.1 Creating xts objects**####
+
+```{r xts, comment=NULL}
+prices <- prices %>%
+  mutate(date = ymd(Dates)) %>%
+  select(date, everything()) %>%
+  select(-Dates) %>%
+  tbl_xts()
+
+mcaps <- mcaps %>%
+  mutate(date = ymd(Dates)) %>%
+  select(date, everything()) %>%
+  select(-Dates) %>%
+  tbl_xts()
+
+volume <- volume %>%
+  mutate(date = ymd(Dates)) %>%
+  select(date, everything()) %>%
+  select(-Dates) %>%
+  tbl_xts()
+
+```
+
+
+####**4.2 Price Filter**####
+
+```{r Price filter}
+pr <- prices
+pr[prices < 1] <- NA
+prices <- pr
+remove(pr)
+```
+
+####**4.3. Calculating Returns**####
+
+```{r Returns}
+ret <- Return.calculate(prices, method = "discrete")
+ret <- ret[-1, ]
+ret <- ret["2000/2018"]
+calc_rets <- ret
+```
+
+
+####**4.4 Prior 12-month return**####
+
+```{r Prior Returns} 
+yearly <- seq(from = 2000, to = 2018, by = 1)
+ret_prior <- ret
+ret_prior[!is.na(ret)] <- 1
+
+for(i in yearly){
+  ext <- paste(i)
+  prior <- colSums(is.na(ret_prior[ext,,]))
+  prior <- prior[prior > 0]
+  ret_prior[ext,names(prior)] <- NA
+  }
+
+ret <- ret * ret_prior
+```
+
+
+####**4.5 Liquidity filter**####
+
+```{r Liquidity Filter} 
+liq_fil <- ret
+liq_fil[ret != 0] <- 1
+
+for(i in yearly){
+  ext <- paste(i)
+  ZDT <- colSums(ret[ext,,]==0, na.rm = T)
+  ZDT <- ZDT[ZDT > 100]
+  liq_fil[ext,names(ZDT)] <- NA
+  }
+
+ret <- ret * liq_fil
+
+ann <- prices[endpoints(ret, 'years'),,]
+```
+
+####**4.6 Market Cap Filter**####
+
+```{r Mcap100}
+mcap100 <- t(apply(-mcaps["2000/2018"], 1, rank))
+mcap100[mcap100 > 100] <- NA
+mcap_mask <- mcap100
+mcap_mask[!is.na(mcap_mask)] <- 1
+ret <- ret * mcap_mask[-1, ]
+
+mcap_mask <- xts(mcap_mask, order.by = index(mcaps["2000/2018"]))
+```
+
+
+###**5. Momentum**###
+
+
+####**5.1 Momentum Sorts**####
+
+
+```{r 12 month ret}
+ret_months <- apply.monthly(ret, Return.cumulative)
+skip <- 12
+
+mom <- rollapply(ret_months, skip, function(x) 1 + Return.cumulative(x[-skip]))
+```
+
+
+
+```{r Rank}
+monthly_cap <- mcap_mask[index(ret_months)]
+mom <- mom * monthly_cap
+rank.twelve <- t(apply(-mom, 1, rank, ties.method = "first"))
+```
+
+
+```{r Momentum Sort}
+rank.twelve[rank.twelve > 100] <- NA
+
+mom_win <- mom_p2 <- mom_p3 <- mom_p4 <- mom_lose <- rank.twelve
+mom_win[mom_win > 20] <- NA
+mom_p2[mom_p2 > 20 & mom_p2 <= 40] <- NA
+mom_p3[mom_p3 > 40 & mom_p3 <= 60] <- NA
+mom_p4[mom_p4 > 60 & mom_p4 <= 80] <- NA
+mom_lose[mom_lose > 80] <- NA
+```
+
+
+
+
+
+
+
+```{r}
+mom_port <- setNames(lapply(ls(pattern="mom_"), function(x) get(x)), ls(pattern="mom_"))
+cgr <- matrix(NA, nrow = 217, ncol = 1)
+port_rets <- vector("list", length = length(mom_port))
+
+for (i in 1:length(mom_port)) {
+  temp <- mom_port[[i]]
+  temp <- temp[-c(1:11),,drop=F]
+  for (r in 1:nrow(temp)) {
+    df <- temp[r,,drop=F] %>% as.data.frame() %>% select_if(~!all(is.na(.)))
+    ext <- rownames(df) %>% ymd() + 5
+    ext <- ext %>% as.character() %>% substr(., 1, 7)
+    p <- calc_rets[ext, colnames(df)]
+    pr <- Return.cumulative(p)
+    cgr[r,1] <- sum(pr) / ncol(pr)
+  }
+  port_rets[[i]] <- cgr
+}
+```
+
+
+
+
+
+```{r}
+winner <- port_rets[[5]]
+loser <- port_rets[[1]]
+port <- cbind(winner, loser)
+port <- xts(port, order.by = index(ret_months[-c(1:11), ]))
+port <- port[-nrow(port), ]
+colnames(port) <- c("Winner", "Loser")
+```
+
+
+```{r fig.width=12, fig.height=8, warning = FALSE}
+gg.PerformanceSummary(port)
+```
+
+```{r, Winner Minus Loser}
+wml <- winner - loser
+colnames(wml) <- "Momentum Payoff"
+wml <- xts(wml,  order.by = index(ret_months[-c(1:11),]))
+wml <- wml[-nrow(wml),]
+```
+
+
+```{r fig.width=12, fig.height=8, warning = FALSE}
+gg.PerformanceSummary(wml, ptitle = "Winner minus Loser performance chart")
+```
+
+
